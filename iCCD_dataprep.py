@@ -5,6 +5,48 @@ from scipy.optimize import curve_fit
 from scipy import interpolate
 import pandas as pd
 
+#%% Plot PL Spectra of accumulation (non-kinetic series)
+def PL_spec(file,cwl=700,plot=False,adjust_skips = 0,wlmin=1,wlmax=-1, label= '', loop=True,yscale='log',background=None, color='b'):
+    """Loads data from an ASC file and applies corrections for ICCD sensitivity and transmission through a 550nm LP filter.
+
+    Args:
+        file (str): File name of the ASC file.
+        wlmin (int, optional): Minimum limit of wavelengths. Defaults to 200.
+        wlmax (int, optional): Maximum limit of wavelengths. Defaults to -200.
+        cwl (int, optional): Central wavelength of grating. Defaults to 700.
+        plot (bool, optional): Plots walvelengths vs signal for each t. Defaults to False.
+        
+    Returns:
+        _type_: data with first column = wavelengths, first row = timepoints, and the rest of the data is the signal
+    """
+    #Load the file, cutting out metadata from bottom
+    data = np.genfromtxt(file,skip_footer=34,usecols=None)
+    # Find closest wavelength indices to wlmin and wlmax
+    wlmin = np.abs(data[:,0]-wlmin).argmin()
+    wlmax = np.abs(data[:,0]-wlmax).argmin()
+    #Wavelengths may change so good to define so we can use the length to get straight to the metadata in all files
+    wls = list(data[wlmin:wlmax,0])
+    signal = data[wlmin:wlmax,1]
+    
+    
+    #Add time to make full array
+    data1 = np.vstack([wls,signal])
+    #data1, trans_sens, trans_filter = ICCDcorrections(data1,cwl)
+
+    if background:
+        data1[1] = data1[1] - background[wlmin:wlmax,1]
+    if plot:
+        plt.plot(data1[0][1:],data1[1][1:],color=color, alpha=0.8,label=label)
+        plt.yscale(yscale)
+        plt.legend()
+        plt.xlabel('Wavelengths/ nm')
+        plt.ylabel('Counts')
+        if not loop:
+            plt.show()
+    
+    return data1
+
+
 #%% Plot of timepoints for during acquistion
 def one_window(t0,dt,n):
     """Calculates the timepoints for a single window of iCCD acquisition.
