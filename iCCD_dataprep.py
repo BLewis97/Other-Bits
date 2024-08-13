@@ -353,7 +353,7 @@ def scaling(decays):
 
 #%%
 
-def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscale='linear'):
+def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscale='linear',normalise=False):
     """Aligns stitches decays and plots them
 
     Args:
