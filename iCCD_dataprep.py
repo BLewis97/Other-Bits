@@ -224,13 +224,10 @@ def gauss_scatter(data,subtract=False,plot=True):
 
 
 #%% PLdecay
-
-import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import Normalize
 
-def PLdecay(data, wlmin=10, wlmax=-10, normalise=False, label='give a for loop', plot=True, yscale='log', smooth=False, ylim=None):
+def PLdecay(data, wlmin=10, wlmax=-10, normalise=False, label='give a for loop', plot=True, yscale='log', smooth=False):
     #Find index closest to wavelength limits
     wlmin = np.abs(data[:,0]-wlmin).argmin()
     wlmax = np.abs(data[:,0]-wlmax).argmin()
@@ -267,8 +264,6 @@ def PLdecay(data, wlmin=10, wlmax=-10, normalise=False, label='give a for loop',
         ax1.set_xlabel('Wavelengths/ nm')
         ax1.set_ylabel('Counts')
         ax1.set_yscale('symlog', linthresh=100)
-        if ylim:
-            ax1.set_ylim(ylim[0], ylim[1])
         ax1.legend()
         
         ax2.plot(time, pl, 'o', label=label)
