@@ -238,11 +238,6 @@ def PLdecay(data, wlmin=10, wlmax=-10, normalise=False, label='give a for loop',
     time = data[0, 1:]  # Time axis
     len_time1 = len(time)
     
-    def smooth_func(y, box_pts):
-        box = np.ones(box_pts) / box_pts
-        y_smooth = np.convolve(y, box, mode='same')
-        return y_smooth
-    
     PL = np.sum(data[wlmin:wlmax, 1:], axis=0)  # Create the signal we track, sum of PL (can be mean, same thing really)
     zero_vals = np.where(PL <= 0)[0]
     
@@ -262,9 +257,7 @@ def PLdecay(data, wlmin=10, wlmax=-10, normalise=False, label='give a for loop',
         for i in range(data.shape[1] - 1):  # - 1 because we add one in next line to account for wavelengths
             signal = data[wlmin:wlmax, i + 1]  # +1 because first column is wavelengths
             signal[signal <= 0] = 1
-            if smooth:
-                signal = smooth_func(signal, smooth)
-
+            
             if normalise:
                 signal = signal / signal.max()
            
@@ -323,7 +316,7 @@ def scaling(decays):
 
 #%%
 
-def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1]):
+def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscale='linear'):
     """Aligns stitches decays and plots them
 
     Args:
@@ -351,10 +344,13 @@ def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1]):
     idx = np.argsort(master_decay[0])
     #print(idx)
     master_sorted = master_decay[:, idx]
-    master_decay[0] = master_decay[0] - master_decay[0][0]
-    plt.plot(master_decay[0], master_decay[1], 'o')
+    time = master_decay[0] - master_decay[0][0]
+    signal = master_decay[1]
+    if normalise:
+        signal = signal/signal[0]
+    plt.plot(time, signal, 'o')
     plt.yscale('log')
-
+    plt.xscale(xscale)
     print(filename)
     
     if save:
