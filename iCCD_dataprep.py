@@ -457,6 +457,7 @@ def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscal
     plt.show()
     
     master_decay = np.concatenate((decays2), axis=1)
+    master_decay[0] = master_decay[0] - master_decay[0][0]
     idx = np.argsort(master_decay[0])
     #print(idx)
     master_sorted = master_decay[:, idx]
