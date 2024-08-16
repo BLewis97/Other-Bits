@@ -4,48 +4,126 @@ import os
 from scipy.optimize import curve_fit
 from scipy import interpolate
 import pandas as pd
+import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
+from matplotlib import cm
+import seaborn as sns
 
+
+# SECTION 1 - LOOKING AT PL SPECTRA FOR STABILITY
 #%% Plot PL Spectra of accumulation (non-kinetic series)
-def PL_spec(file,cwl=700,plot=False,adjust_skips = 0,wlmin=1,wlmax=-1, label= '', loop=True,yscale='log',background=None, color='b'):
-    """Loads data from an ASC file and applies corrections for ICCD sensitivity and transmission through a 550nm LP filter.
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+import matplotlib.cm as cm
+
+def PL_spec(files, cwl=700, plot=False, adjust_skips=0, wlmin=1, wlmax=-1,
+            label='', loop=True, yscale='log', background=None, color='b'):
+    """Loads data from ASC files and applies corrections for ICCD sensitivity and transmission through a 550nm LP filter.
 
     Args:
-        file (str): File name of the ASC file.
-        wlmin (int, optional): Minimum limit of wavelengths. Defaults to 200.
-        wlmax (int, optional): Maximum limit of wavelengths. Defaults to -200.
+        files (list): List of file names of the ASC files.
+        wlmin (int, optional): Minimum limit of wavelengths. Defaults to 1.
+        wlmax (int, optional): Maximum limit of wavelengths. Defaults to -1.
         cwl (int, optional): Central wavelength of grating. Defaults to 700.
-        plot (bool, optional): Plots walvelengths vs signal for each t. Defaults to False.
+        plot (bool, optional): Plots wavelengths vs signal for each time. Defaults to False.
         
     Returns:
-        _type_: data with first column = wavelengths, first row = timepoints, and the rest of the data is the signal
+        data_all (list of arrays): List of data arrays with each file's wavelengths and signal.
     """
-    #Load the file, cutting out metadata from bottom
-    data = np.genfromtxt(file,skip_footer=34,usecols=None)
-    # Find closest wavelength indices to wlmin and wlmax
-    wlmin = np.abs(data[:,0]-wlmin).argmin()
-    wlmax = np.abs(data[:,0]-wlmax).argmin()
-    #Wavelengths may change so good to define so we can use the length to get straight to the metadata in all files
-    wls = list(data[wlmin:wlmax,0])
-    signal = data[wlmin:wlmax,1]
+    data_all = []  # To store data for all files
+    mins = []  # To store the time in minutes
     
+    # Normalize color mapping for plots
+    norm = Normalize(vmin=0, vmax=len(files))
+    colormap = cm.get_cmap('viridis')
     
-    #Add time to make full array
-    data1 = np.vstack([wls,signal])
-    #data1, trans_sens, trans_filter = ICCDcorrections(data1,cwl)
-
-    if background:
-        data1[1] = data1[1] - background[wlmin:wlmax,1]
+    for i, f in enumerate(files):
+        # Load the file, cutting out metadata from the bottom
+        data = np.genfromtxt(f, skip_footer=34, usecols=None)
+        minute = f[label[0]:label[1]]
+        mins.append(minute)
+        # Find closest wavelength indices to wlmin and wlmax
+        wlmin_idx = np.abs(data[:, 0] - wlmin).argmin()
+        wlmax_idx = np.abs(data[:, 0] - wlmax).argmin()
+        
+        # Extract the relevant wavelength and signal data
+        wls = data[wlmin_idx:wlmax_idx, 0]
+        signal = data[wlmin_idx:wlmax_idx, 1]
+        
+        # Create a combined data array for this file
+        data1 = np.vstack([wls, signal])
+        
+        # Apply background subtraction if provided
+        if background is not None:
+            data1[1] = data1[1] - background[wlmin_idx:wlmax_idx, 1]
+        
+        # Store the processed data
+        data_all.append(data1)
+        
+        # Plotting
+        if plot:
+            color = colormap(norm(i))
+            plt.plot(data1[0], data1[1], color=color, alpha=0.8, label=f[label[0]:label[1]] if label else f"File {i+1}")
+                
+    # Show the plot if plotting is enabled
     if plot:
-        plt.plot(data1[0][1:],data1[1][1:],color=color, alpha=0.8,label=label)
         plt.yscale(yscale)
-        plt.legend()
-        plt.xlabel('Wavelengths/ nm')
+        plt.xlabel('Wavelength (nm)')
         plt.ylabel('Counts')
-        if not loop:
-            plt.show()
+        plt.title('PL Spectra (stability)')
+        plt.legend(title='Time (Minutes)')
+        plt.show()
     
-    return data1
+    return data_all, mins
 
+#%% Track Peak magnitudes and positions
+
+def track_peaks(data,times):
+    
+    def peak_trace(data):
+        #Smooth the data
+        def smooth_func(y, box_pts):
+            box = np.ones(box_pts) / box_pts
+            y_smooth = np.convolve(y, box, mode='same')
+            return y_smooth
+        data[1] = smooth_func(data[1], 10)
+        #Max Value of the PL Spectra
+        peak = np.max(data[1])
+        #Wavelength of the peak
+        peak_wl = data[0][np.argmax(data[1])]
+        return peak, peak_wl
+    
+    peaks = []
+    peak_wls = []
+    for d in data:
+        peak, peak_wl = peak_trace(d)
+        peaks.append(peak)
+        peak_wls.append(peak_wl)
+    #plot peak wavelength and peak value vs time on same graph with two different axes
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+    ax1.plot(times, peaks, 'g-')
+    ax2.plot(times, peak_wls, 'b-')
+    ax1.set_xlabel('Time (mins)')
+    ax1.set_ylabel('Peak Value', color='g')
+    ax2.set_ylabel('Peak Wavelength', color='b')
+    plt.show()
+    return peaks, peak_wls, times
+
+#%% HEATMAP OF PL SPECTRA
+
+def plot_heatmap(data,times):
+    
+    wavelengths = data[0][0]
+    wavelengths = [int(w) for w in wavelengths]
+    intensities = [d[1] for d in data]
+    df = pd.DataFrame(intensities, columns=wavelengths, index=times)
+    sns.heatmap(df, cmap='viridis')
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Time (mins)')
+
+    plt.show()
 
 #%% Plot of timepoints for during acquistion
 def one_window(t0,dt,n):
@@ -353,7 +431,8 @@ def scaling(decays):
 
 #%%
 
-def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscale='linear',normalise=False):
+def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscale='linear',
+                 normalise=False,path=None,title='Sample'):
     """Aligns stitches decays and plots them
 
     Args:
@@ -388,11 +467,14 @@ def plot_aligned(decays, ratios, save=False, filename=None, adjust=[1,1,1],xscal
     plt.plot(time, signal, 'o')
     plt.yscale('log')
     plt.xscale(xscale)
+    plt.title(f'Aligned PL Decays for {title}')
     print(filename)
     
     if save:
         if filename is None:
             print('NO FILENAME SET - call filename or file will not save')
+        elif path:
+            np.save(path + '/' + filename + '.npy', master_sorted)
         else:
             # Create the 'Sorted' folder if it doesn't exist
             sorted_folder = 'Sorted'
@@ -458,13 +540,13 @@ def calc_fluences(P=[1,5,10],A = 1, d = 500, wl = 400, di = 1605,
     hv = (6.626E-34*2.998E8)/(wl*1e-9)                    #Calculate photon energy
     absorption = 1-10**(-A)                               #Calculate % of Photons absorbed
     if areaType == 'elliptical':                          #Calculate area in cm3 based on shape
-        area = np.pi*((a)/2)*((b)/2)            #Ellipse is pi*rad1*rad2
+        area = np.pi*((a*1e-4)/2)*((b*1e-4)/2)            #Ellipse is pi*rad1*rad2
     else:
-        area = np.pi*(di/2)**2                       #Circle pi*r^2 in cm2
+        area = np.pi*(di*1e-4/2)**2                       #Circle pi*r^2 in cm2
    
     nlist = []
     for p in P:
-        n = (absorption*p*1e-6)/(area*f*hv*d*1e-7)        # in cm-3
+        n = (A*p*1e-6)/(area*f*hv*d*1e-7)        # in cm-3
         
         nlist.append(n)
     
@@ -524,7 +606,7 @@ def diff_lifetime(PL, time, ideality =2, plot=False, title = '',xscale = 'linear
         plt.plot(time,diff,'.')
         plt.xlabel('Time (ns)')
         plt.ylabel(r'Differential lifetime $\tau_{diff}$ (s$^{-1}$)')
-        plt.title('Differential lifetime against time for' + title)
+        plt.title('Differential lifetime against time for ' + title)
         plt.yscale('log')
         plt.xscale(xscale)
         plt.show()
